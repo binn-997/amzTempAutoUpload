@@ -1,28 +1,37 @@
-# Excel 数据文件
+# === 数据文件 ===
 *.xlsx
 *.xlsm
 
-# 构建产物
+# === 输出目录 ===
+prov_output/
+split_output/
+
+# === 构建产物 ===
 dist/
 build/
+*.spec
+*.egg-info/
 
-# Python 缓存
+# === Python 缓存 ===
 __pycache__/
 *.pyc
 *.pyo
 
-# 虚拟环境
+# === 虚拟环境 ===
 .venv/
 venv/
 env/
 
-# IDE
+# === IDE / 编辑器 ===
 .vscode/
 .idea/
+.DS_Store
 
-# Office 临时文件
+# === 临时文件 ===
 ~$*.xlsx
 ~$*.xlsm
+*.log
 
-# PyInstaller
-*.spec
+# === 类型检查缓存 ===
+.mypy_cache/
+.pytest_cache/
