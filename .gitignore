@@ -1,0 +1,28 @@
+# Excel 数据文件
+*.xlsx
+*.xlsm
+
+# 构建产物
+dist/
+build/
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# Office 临时文件
+~$*.xlsx
+~$*.xlsm
+
+# PyInstaller
+*.spec
