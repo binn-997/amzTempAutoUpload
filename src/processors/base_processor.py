@@ -6,19 +6,27 @@
 
 from __future__ import annotations
 
+import io
+import logging
 import math
 import os
 import re
-from typing import Any, Dict, List, Optional, Pattern
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.utils import column_index_from_string
 from openpyxl.worksheet.worksheet import Worksheet
+
+logger = logging.getLogger(__name__)
 
 
 class ProcessingError(Exception):
     """处理流程中的可恢复错误。"""
+
+
+class IOFailure(RuntimeError):
+    """Excel 文件读写失败（携带文件名和操作类型）。"""
 
 
 class BaseProcessor:
@@ -153,11 +161,28 @@ class BaseProcessor:
 
     @property
     def _img_start(self) -> int:
-        return column_index_from_string(self.IMG_TGT_START)
+        return int(column_index_from_string(self.IMG_TGT_START))
 
     @property
     def _pc_idx(self) -> int:
-        return column_index_from_string(self.PC_COL)
+        return int(column_index_from_string(self.PC_COL))
+
+    # ==================== 安全工具 ====================
+
+    @staticmethod
+    def _sanitize_cell_value(value: Any) -> Any:
+        """检测并转义潜在的 CSV/Excel 公式注入字符。
+
+        若字符串以 = + - @ 开头，前缀单引号中和公式执行。
+        """
+        if isinstance(value, str):
+            stripped = value.lstrip()
+            if stripped and stripped[0] in ("=", "+", "-", "@"):
+                logger.warning(
+                    "检测到潜在公式注入，已转义 [%s...]", str(value)[:80]
+                )
+                return "'" + value
+        return value
 
     # ==================== 数据预处理 ====================
 
@@ -203,7 +228,7 @@ class BaseProcessor:
         parent_df = (
             df[df["is_parent"]][["sku"] + parent_cols].set_index("sku")
         )
-        parent_dict: dict = parent_df.to_dict(orient="index")
+        parent_dict: dict[str, dict[str, str]] = parent_df.to_dict(orient="index")
 
         def get_parent_data(row: pd.Series) -> pd.Series:
             if row["is_parent"]:
@@ -221,20 +246,21 @@ class BaseProcessor:
 
     def fill_data_to_template(self, ws: Worksheet, df: pd.DataFrame) -> None:
         """根据映射配置，将 DataFrame 逐行写入模板工作表。"""
+        _sanitize = self._sanitize_cell_value
         for r_idx, (_, row) in enumerate(df.iterrows(), start=self.START_ROW):
             # A. 一对一映射
             for src_col, tgt_idx in self._simple_idx.items():
-                ws.cell(row=r_idx, column=tgt_idx, value=row[src_col])
+                ws.cell(row=r_idx, column=tgt_idx, value=_sanitize(row[src_col]))
 
             # B. 一对多映射
             for src_col, tgt_indices in self._multi_idx.items():
                 for tgt_idx in tgt_indices:
-                    ws.cell(row=r_idx, column=tgt_idx, value=row[src_col])
+                    ws.cell(row=r_idx, column=tgt_idx, value=_sanitize(row[src_col]))
 
             # C. Bullet Points
             for i, tgt_idx in enumerate(self._bullet_idx):
                 src_col = f"{self.BULLET_SRC_PREFIX}{i + 1}"
-                ws.cell(row=r_idx, column=tgt_idx, value=row[src_col])
+                ws.cell(row=r_idx, column=tgt_idx, value=_sanitize(row[src_col]))
 
             # D. 图片
             images = [
@@ -243,7 +269,9 @@ class BaseProcessor:
                 if str(row[pos]).strip()
             ]
             for img_i, url in enumerate(images[: self.MAX_IMAGES]):
-                ws.cell(row=r_idx, column=self._img_start + img_i, value=url)
+                ws.cell(
+                    row=r_idx, column=self._img_start + img_i, value=_sanitize(url)
+                )
             for empty_i in range(len(images), self.MAX_IMAGES):
                 ws.cell(row=r_idx, column=self._img_start + empty_i, value="")
 
@@ -279,8 +307,45 @@ class BaseProcessor:
 
     # ==================== 拆分保存 ====================
 
+    def _load_template_buffer(self) -> io.BytesIO:
+        """加载模板文件到内存缓冲区（只读一次磁盘）。"""
+        try:
+            wb = load_workbook(self.TEMPLATE_FILE, keep_vba=False)
+        except Exception as e:
+            raise IOFailure(f"加载模板失败 [{self.TEMPLATE_FILE}]: {e}") from e
+
+        if self.SHEET_NAME not in wb.sheetnames:
+            wb.close()
+            raise ProcessingError(
+                f"模板中未找到 '{self.SHEET_NAME}' 工作表"
+            )
+
+        buf = io.BytesIO()
+        try:
+            wb.save(buf)
+        except Exception as e:
+            raise IOFailure(f"缓存模板失败 [{self.TEMPLATE_FILE}]: {e}") from e
+        finally:
+            wb.close()
+        return buf
+
+    def _create_chunk_workbook(
+        self, template_buf: io.BytesIO
+    ) -> tuple[Workbook, Worksheet]:
+        """从内存缓冲区创建分块工作簿，返回 (workbook, worksheet)。"""
+        template_buf.seek(0)
+        try:
+            wb = load_workbook(template_buf, keep_vba=False)
+        except Exception as e:
+            raise IOFailure(f"从缓存创建分块失败: {e}") from e
+        return wb, wb[self.SHEET_NAME]
+
     def save_split_workbooks(self, processed_df: pd.DataFrame) -> None:
-        """将数据按 CHUNK_SIZE 拆分为多个文件并保存。"""
+        """将数据按 CHUNK_SIZE 拆分为多个文件并保存。
+
+        优化：模板文件只在开始时加载一次到内存 BytesIO，
+        后续分块均从内存缓存创建，避免重复磁盘 I/O。
+        """
         total_rows = len(processed_df)
         if total_rows == 0:
             print("源数据为空，跳过。")
@@ -296,7 +361,13 @@ class BaseProcessor:
         num_chunks = math.ceil(total_rows / self.CHUNK_SIZE)
 
         print(f"\n数据预处理完成，共 {total_rows} 行。")
-        print(f"按每文件 {self.CHUNK_SIZE} 行拆分，共 {num_chunks} 个文件。\n")
+        print(
+            f"按每文件 {self.CHUNK_SIZE} 行拆分，共 {num_chunks} 个文件。\n"
+        )
+
+        # ★ 性能优化：模板只加载一次到内存
+        print(f"📖 加载模板: {self.TEMPLATE_FILE}")
+        template_buf = self._load_template_buffer()
 
         for chunk_idx in range(num_chunks):
             start = chunk_idx * self.CHUNK_SIZE
@@ -305,13 +376,7 @@ class BaseProcessor:
             chunk_df = processed_df.iloc[start:end].reset_index(drop=True)
             chunk_rows = len(chunk_df)
 
-            wb = load_workbook(self.TEMPLATE_FILE, keep_vba=False)
-            if self.SHEET_NAME not in wb.sheetnames:
-                wb.close()
-                raise ProcessingError(
-                    f"模板中未找到 '{self.SHEET_NAME}' 工作表"
-                )
-            ws = wb[self.SHEET_NAME]
+            wb, ws = self._create_chunk_workbook(template_buf)
 
             # 填充 & 清除
             self.fill_data_to_template(ws, chunk_df)
@@ -325,7 +390,9 @@ class BaseProcessor:
                     start_delete_row, amount=ws.max_row - start_delete_row + 1
                 )
 
-            output_name = f"{base_name}{self.OUTPUT_SUFFIX}_part{chunk_idx + 1}.xlsx"
+            output_name = (
+                f"{base_name}{self.OUTPUT_SUFFIX}_part{chunk_idx + 1}.xlsx"
+            )
             if output_dir:
                 output_path = os.path.join(output_dir, output_name)
             else:
@@ -335,7 +402,11 @@ class BaseProcessor:
                 f"  [{chunk_idx + 1}/{num_chunks}] 💾 {output_path}"
                 f"  ({chunk_rows} 行)"
             )
-            wb.save(output_path)
+            try:
+                wb.save(output_path)
+            except Exception as e:
+                wb.close()
+                raise IOFailure(f"保存文件失败 [{output_path}]: {e}") from e
             wb.close()
 
         print(f"\n✅ 全部 {num_chunks} 个文件保存完毕。")
@@ -357,9 +428,14 @@ class BaseProcessor:
         if not os.path.exists(self.TEMPLATE_FILE):
             raise ProcessingError(f"模板文件不存在: {self.TEMPLATE_FILE}")
 
-        raw_df: pd.DataFrame = pd.read_excel(
-            self.SOURCE_FILE, sheet_name=0, header=None, dtype=str
-        )
+        try:
+            raw_df: pd.DataFrame = pd.read_excel(
+                self.SOURCE_FILE, sheet_name=0, header=None, dtype=str
+            )
+        except Exception as e:
+            raise IOFailure(
+                f"读取源文件失败 [{self.SOURCE_FILE}]: {e}"
+            ) from e
 
         print("\n[2/3] 预处理源数据...")
         processed_df = self.preprocess_source_data(raw_df)
@@ -378,9 +454,14 @@ class BaseProcessor:
         if not os.path.exists(self.TEMPLATE_FILE):
             raise ProcessingError(f"模板文件不存在: {self.TEMPLATE_FILE}")
 
-        raw_df = pd.read_excel(
-            self.SOURCE_FILE, sheet_name=0, header=None, dtype=str
-        )
+        try:
+            raw_df: pd.DataFrame = pd.read_excel(
+                self.SOURCE_FILE, sheet_name=0, header=None, dtype=str
+            )
+        except Exception as e:
+            raise IOFailure(
+                f"读取源文件失败 [{self.SOURCE_FILE}]: {e}"
+            ) from e
         processed_df = self.preprocess_source_data(raw_df)
 
         total_rows = len(processed_df)
