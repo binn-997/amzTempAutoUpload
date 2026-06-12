@@ -1,0 +1,7 @@
+# 核心依赖
+pandas==3.0.3
+openpyxl==3.1.5
+
+# 构建依赖（打包为 exe）
+pyinstaller==6.20.0
+pyinstaller-hooks-contrib==2026.5

@@ -41,25 +41,6 @@ class Config:
         "bullet5": 44,
         "images": [10, 11, 12, 13, 14, 15, 16],
     }
-        # ========== 源数据列索引 (0-based) ==========
-    # SRC = {
-    #     "sku": 1,
-    #     "parent_sku": 2,
-    #     "title": 3,
-    #     "color": 6,
-    #     "size": 7,
-    #     "package_weight": 9,
-    #     "standprice": 38,
-    #     "list_price_tax": 39,
-    #     "generic_keywords": 45,
-    #     "bullet1": 40,
-    #     "bullet2": 41,
-    #     "bullet3": 42,
-    #     "bullet4": 43,
-    #     "bullet5": 44,
-    #     "images": [10, 11, 12, 13, 14, 15, 16],
-    # }
-
     # ========== ★ 模块化映射配置（修改映射规则只需改这里）★ ==========
 
     # --- A. 一对一映射：{DataFrame列名: 目标Excel列字母} ---
