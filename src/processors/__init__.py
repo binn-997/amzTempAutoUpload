@@ -1,5 +1,12 @@
-"""品牌处理器模块。每个文件只需定义配置，逻辑由 BaseProcessor 提供。"""
+"""品牌处理器模块。
 
-from src.processors.base_processor import BaseProcessor, ProcessingError
+产品类型已完全配置化（config/categories.yaml），不再需要子类文件。
+BaseProcessor 通过配置字典动态创建实例。
 
-__all__ = ["BaseProcessor", "ProcessingError"]
+旧版兼容入口（prov_uploadEcel_Split_*.py）仍可用，
+它们从配置文件读取默认参数后委托 BaseProcessor 执行。
+"""
+
+from src.processors.base_processor import BaseProcessor, ProcessingError, IOFailure
+
+__all__ = ["BaseProcessor", "ProcessingError", "IOFailure"]

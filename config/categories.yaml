@@ -1,0 +1,271 @@
+# ============================================================
+# Amazon 商品数据处理 — 产品类型配置文件
+# ============================================================
+# 用法：
+#   1. 添加新产品类型：在 categories 下新增一个条目，提供必要参数即可
+#   2. 修改现有产品类型：直接编辑对应条目的参数
+#   3. 所有参数均可被 CLI 参数覆盖（如 --source、--template、--chunk）
+#
+# 格式说明：
+#   - 本文件为 YAML 格式（也支持 JSON，将扩展名改为 .json 即可）
+#   - 每个产品类型只需定义与 defaults 不同的参数
+#   - 未定义的参数自动继承 defaults 中的值
+#   - 字典类型参数（如 size_replacements）会与 defaults 合并
+#   - 列表类型参数（如 parent_clear_letters）会完全替换 defaults
+# ============================================================
+
+# ── 全局默认值 ─────────────────────────────────────────────
+# 所有产品类型共享的默认参数，每个产品类型可按需覆盖。
+defaults:
+  # 默认分块行数（每个输出文件最多包含的行数）
+  chunk_size: 500
+
+  # 标题前缀（加在源数据 title 字段之前，空字符串表示不加）
+  title_prefix: ""
+
+  # 输出目录
+  output_dir: "./prov_output"
+
+  # 输出文件名后缀
+  output_suffix: "_prov"
+
+  # 是否输出 final_keywords 列（某些产品类型的模板不需要此列）
+  include_final_keywords: true
+
+  # size_class 写入的模板列字母（null 表示不输出 size_class）
+  size_class_col: "AD"
+
+  # MULTI_MAP 中 size 字段对应的目标列列表
+  size_target_cols: ["AE", "CH", "FC"]
+
+  # 父体行需要清空的列字母列表（子体专属字段）
+  # 注意：此列表会完全替换，不会与 defaults 合并
+  parent_clear_letters:
+    - "V"
+    - "W"
+    - "X"
+    - "AA"
+    - "AB"
+    - "AC"
+    - "AD"
+    - "AE"
+    - "AF"
+    - "AG"
+    - "AH"
+    - "BY"
+    - "BZ"
+    - "CF"
+    - "CG"
+    - "CH"
+    - "FC"
+
+  # 尺码替换规则（正则表达式 → 替换文本）
+  # 注意：产品类型中定义的同名字典会与此合并（产品类型的键优先）
+  size_replacements:
+    '\bXXXL\b': '3XL'
+    '\bXXXXL\b': '4XL'
+    '\bXXXXXL\b': '5XL'
+    '\bXXXXXXL\b': '6XL'
+    '\bXXXXXXXL\b': '7XL'
+    '\bXXXXXXXXL\b': '8XL'
+    '\bXXXXXXXXXL\b': '9XL'
+    '\bone size\b': 'Einheitsgröße'
+
+# ── 源数据列索引（0-based）─────────────────────────────────
+# 源 Excel 文件中各字段所在的列号，所有产品类型共用。
+# 通常情况下无需修改。
+source_columns:
+  sku: 1
+  parent_sku: 2
+  title: 3
+  color: 6
+  size: 7
+  package_weight: 9
+  standprice: 38
+  list_price_tax: 39
+  generic_keywords: 45
+  bullet1: 40
+  bullet2: 41
+  bullet3: 42
+  bullet4: 43
+  bullet5: 44
+  images: [10, 11, 12, 13, 14, 15, 16]
+
+# ── 模板目标列映射（所有产品类型共用）─────────────────────
+# 模板 Excel 中各字段对应的列字母，通常情况下无需修改。
+template_columns:
+  # 一对一映射：源字段 → 模板列字母
+  simple:
+    sku: "B"
+    parent_sku: "BY"
+    title: "G"
+    standprice: "V"
+    package_weight: "GD"
+    list_price_tax: "KP"
+    final_keywords: "CE"
+    # size_class 的目标列由产品类型的 size_class_col 决定
+  # 一对多映射：源字段 → [模板列字母列表]
+  multi:
+    color: ["CF", "CG"]
+    # size 的目标列由产品类型的 size_target_cols 决定
+  # Bullet Points 目标列
+  bullets: ["CO", "CP", "CQ", "CR", "CS"]
+  # 图片起始列（后续 7 列依次对应 7 张图）
+  images_start: "BH"
+  # 父子标识列
+  parent_child: "BX"
+
+# ── 产品类型定义 ───────────────────────────────────────────
+categories:
+  # ===== azd：Anzug Damen（女士西装） =====
+  azd:
+    description: "Anzug Damen（女士西装）"
+    default_source: "data/624madchen.xlsx"
+    template_file: "./temp/prov_azdTemp.xlsm"
+    chunk_size: 1000
+
+  # ===== azh：Anzug Herren（男士西装） =====
+  azh:
+    description: "Anzug Herren（男士西装）"
+    default_source: "data/624azh.xlsx"
+    template_file: "./temp/prov_azhTemp.xlsm"
+    chunk_size: 1000
+
+  # ===== hd：Hose Damen（女士裤装） =====
+  hd:
+    description: "Hose Damen（女士裤装）"
+    default_source: "data/610hd.xlsx"
+    template_file: "./temp/prov_hdTemp.xlsx"   # 注意：hd 模板为 .xlsx 格式
+    chunk_size: 1000
+    size_class_col: "BA"
+    size_target_cols: ["BB", "CH", "FC"]
+    parent_clear_letters:
+      - "V"
+      - "W"
+      - "X"
+      - "AA"
+      - "AB"
+      - "BA"
+      - "BB"
+      - "BC"
+      - "BF"
+      - "BG"
+      - "AZ"
+      - "BY"
+      - "BZ"
+      - "CF"
+      - "CG"
+      - "CH"
+      - "FC"
+
+  # ===== hh：Hose Herren（男士裤装） =====
+  hh:
+    description: "Hose Herren（男士裤装）"
+    default_source: "data/611hh.xlsx"
+    template_file: "./temp/prov_hhTemp.xlsm"
+    chunk_size: 1000
+    include_final_keywords: false      # hh 不输出 keywords
+    size_class_col: "BA"
+    size_target_cols: ["BB", "CH", "FC"]
+    parent_clear_letters:
+      - "V"
+      - "W"
+      - "X"
+      - "AA"
+      - "AB"
+      - "BA"
+      - "BB"
+      - "BC"
+      - "BF"
+      - "BG"
+      - "AZ"
+      - "BY"
+      - "BZ"
+      - "CF"
+      - "CG"
+      - "CH"
+      - "FC"
+
+  # ===== kle：Kleid（连衣裙） =====
+  kle:
+    description: "Kleid（连衣裙）"
+    default_source: "data/609kle.xlsx"
+    template_file: "./temp/prov_kleTemp.xlsm"
+    chunk_size: 1000
+
+  # ===== std：Strumpfhose Damen（女士连裤袜） =====
+  std:
+    description: "Strumpfhose Damen（女士连裤袜）"
+    default_source: "data/521std.xlsx"
+    template_file: "./temp/prov_stdTemp.xlsm"
+    chunk_size: 500
+    size_class_col: null               # std 不输出 size_class
+    size_target_cols: ["CH", "FC"]     # 无 AE 列
+    parent_clear_letters:
+      - "V"
+      - "W"
+      - "AA"
+      - "AB"
+      - "BY"
+      - "BZ"
+      - "CF"
+      - "CG"
+      - "CH"
+      - "FC"
+
+  # ===== td：Top Damen（女士上装） =====
+  td:
+    description: "Top Damen（女士上装）"
+    default_source: "data/623td.xlsx"
+    template_file: "./temp/prov_tdTemp.xlsm"
+    chunk_size: 3000
+    parent_clear_letters:
+      - "V"
+      - "W"
+      - "X"
+      - "AA"
+      - "AB"
+      - "AC"
+      - "AD"
+      - "AE"
+      - "AG"
+      - "AH"
+      - "AZ"
+      - "BY"
+      - "BZ"
+      - "CF"
+      - "CG"
+      - "CH"
+      - "FC"
+
+  # ===== th：Top Herren（男士上装） =====
+  th:
+    description: "Top Herren（男士上装）"
+    default_source: "data/617th.xlsx"
+    template_file: "./temp/prov_thTemp.xlsm"
+    chunk_size: 1200
+    parent_clear_letters:
+      - "V"
+      - "W"
+      - "X"
+      - "AA"
+      - "AB"
+      - "AC"
+      - "AD"
+      - "AE"
+      - "AG"
+      - "AH"
+      - "AZ"
+      - "BY"
+      - "BZ"
+      - "CF"
+      - "CG"
+      - "CH"
+      - "FC"
+    # th 有额外的尺码替换规则（L2→XXL, L3→3XL 等）
+    # 这些会与 defaults.size_replacements 合并
+    size_replacements:
+      '\bL2\b': 'XXL'
+      '\bL3\b': '3XL'
+      '\bL4\b': '4XL'
+      '\bL5\b': '5XL'
