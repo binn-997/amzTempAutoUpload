@@ -1,6 +1,7 @@
 import pandas as pd
-from collections import defaultdict
 import re
+from collections import defaultdict
+from datetime import datetime
 
 # ===================== 配置模块 =====================
 COLOR_TRANSLATIONS = {
@@ -40,10 +41,12 @@ COLOR_TRANSLATIONS = {
     "BU": "BU",
     "GN": "GN",
     "Watermelon Red": "Wassermelonenrot",
+    "Dark Purple": "Dunkellila",
+    "Gold": "Gold",
 }
 
-INPUT_FILE = "1.xlsx"
-OUTPUT_FILE = "processed_1.xlsx"
+INPUT_FILE = "data/1.xlsx"
+OUTPUT_FILE = f"data/processed_1_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 SHEET_NAME = "Sheet1"
 
 
@@ -108,6 +111,7 @@ def add_variant_labels(groups):
     签名 = (color, tuple(sizes))
     - 唯一 → 不改名
     - 出现 N 次 → 依次 "ColorV1", "ColorV2", ...
+    注意：传入的 color 应当已经翻译过，这里只负责查重加后缀。
     """
     signature_map = defaultdict(list)
 
@@ -124,7 +128,7 @@ def add_variant_labels(groups):
                 index_to_new_color[idx] = color
         else:
             for i, indices in enumerate(index_lists, 1):
-                label = f"V{i}{color}"
+                label = f"{color}V{i}"
                 for idx in indices:
                     index_to_new_color[idx] = label
 
@@ -133,23 +137,34 @@ def add_variant_labels(groups):
 
 def translate_color(color_name, translate=True):
     """
-    翻译颜色名，保留 V 后缀。
-    Blue         → Blau
-    BlueV1       → BlauV1
-    Dark GreenV2 → DunkelgrünV2
+    翻译颜色名（支持带数字后缀的变体标签）。
+    Blue       → Blau
+    Dark Green → Dunkelgrün
+    Black1     → Schwarz1   （先剥数字→翻译→拼回）
     """
     if not translate:
         return color_name
 
-    color_name = color_name.strip()
-    m = re.match(r'^(.+?)(V\d+)?$', color_name)
-    if m:
-        core   = m.group(1).strip()
-        suffix = m.group(2) or ""
-        translated = COLOR_TRANSLATIONS.get(core, core)
-        return f"{translated}{suffix}"
+    # 安全处理非字符串值（如 NaN）
+    if not isinstance(color_name, str):
+        return color_name
 
-    return COLOR_TRANSLATIONS.get(color_name, color_name)
+    color_name = color_name.strip()
+
+    # 1. 精确匹配
+    if color_name in COLOR_TRANSLATIONS:
+        return COLOR_TRANSLATIONS[color_name]
+
+    # 2. 剥离尾部数字后缀再匹配（如 Black1 → Black，Red2 → Red）
+    m = re.match(r"^(.+?)(\d+)$", color_name)
+    if m:
+        base = m.group(1)
+        suffix = m.group(2)
+        if base in COLOR_TRANSLATIONS:
+            return COLOR_TRANSLATIONS[base] + suffix
+
+    # 3. 都不匹配，原样返回
+    return color_name
 
 
 # ===================== 核心处理模块 =====================
@@ -176,14 +191,19 @@ def process_excel_file(input_file, output_file, sheet_name="Sheet1",
                 if len(blk) == 1 and blk[0][1] is None:
                     continue
                 groups = extract_color_groups(blk)
-                local_map = add_variant_labels(groups)
+                # 1. 先翻译颜色
+                translated_groups = [
+                    (translate_color(color, enable_translation), sizes, indices)
+                    for color, sizes, indices in groups
+                ]
+                # 2. 再查重加 V1/V2 后缀
+                local_map = add_variant_labels(translated_groups)
                 global_map.update(local_map)
 
             changed = 0
             for idx, new_color in global_map.items():
-                final = translate_color(new_color, enable_translation)
-                if final != original.iloc[idx, 0]:
-                    df.iloc[idx, 0] = final
+                if new_color != original.iloc[idx, 0]:
+                    df.iloc[idx, 0] = new_color
                     changed += 1
 
             print(f"已修改: {changed} 行")
