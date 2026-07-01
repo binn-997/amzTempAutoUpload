@@ -117,25 +117,27 @@ class BaseProcessor:
             })
         )
 
-        # ── 共享的源列映射（来自 config，回退到类常量） ──
+        # ── 共享的源列映射（默认值 + config 全量透传，支持自定义字段） ──
         src_cols = self._config.get("source_columns", {})
-        self.src: Dict[str, Any] = {
-            "sku": src_cols.get("sku", 1),
-            "parent_sku": src_cols.get("parent_sku", 2),
-            "title": src_cols.get("title", 3),
-            "color": src_cols.get("color", 6),
-            "size": src_cols.get("size", 7),
-            "package_weight": src_cols.get("package_weight", 9),
-            "standprice": src_cols.get("standprice", 38),
-            "list_price_tax": src_cols.get("list_price_tax", 39),
-            "generic_keywords": src_cols.get("generic_keywords", 45),
-            "bullet1": src_cols.get("bullet1", 40),
-            "bullet2": src_cols.get("bullet2", 41),
-            "bullet3": src_cols.get("bullet3", 42),
-            "bullet4": src_cols.get("bullet4", 43),
-            "bullet5": src_cols.get("bullet5", 44),
-            "images": src_cols.get("images", [10, 11, 12, 13, 14, 15, 16]),
+        _src_defaults: Dict[str, Any] = {
+            "sku": 1,
+            "parent_sku": 2,
+            "title": 3,
+            "color": 6,
+            "size": 7,
+            "package_weight": 9,
+            "standprice": 38,
+            "list_price_tax": 39,
+            "generic_keywords": 45,
+            "bullet1": 40,
+            "bullet2": 41,
+            "bullet3": 42,
+            "bullet4": 43,
+            "bullet5": 44,
+            "images": [10, 11, 12, 13, 14, 15, 16],
         }
+        # config 中的值覆盖默认值，config 中的新键（如 Produktbeschreibungen）直接添加
+        self.src = {**_src_defaults, **src_cols}
 
         # ── 共享的模板列映射（来自 config，回退到类常量） ──
         tpl_cols = self._config.get("template_columns", {})
@@ -143,15 +145,17 @@ class BaseProcessor:
         tpl_multi = tpl_cols.get("multi", {})
         tpl_bullets = tpl_cols.get("bullets", ["CO", "CP", "CQ", "CR", "CS"])
 
-        self._tpl_simple_base: Dict[str, str] = {
-            "sku": tpl_simple.get("sku", "B"),
-            "parent_sku": tpl_simple.get("parent_sku", "BY"),
-            "title": tpl_simple.get("title", "G"),
-            "standprice": tpl_simple.get("standprice", "V"),
-            "package_weight": tpl_simple.get("package_weight", "GD"),
-            "list_price_tax": tpl_simple.get("list_price_tax", "KP"),
-            "final_keywords": tpl_simple.get("final_keywords", "CE"),
+        _tpl_simple_defaults: Dict[str, str] = {
+            "sku": "B",
+            "parent_sku": "BY",
+            "title": "G",
+            "standprice": "V",
+            "package_weight": "GD",
+            "list_price_tax": "KP",
+            "final_keywords": "CE",
         }
+        # config 中的值覆盖默认值，config 中的新键（如 Produktbeschreibungen）直接添加
+        self._tpl_simple_base = {**_tpl_simple_defaults, **tpl_simple}
         self._tpl_multi_color: List[str] = list(
             tpl_multi.get("color", ["CF", "CG"])
         )
