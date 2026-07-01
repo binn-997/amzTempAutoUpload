@@ -37,6 +37,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import statistics
 import sys
 from typing import Optional
 
@@ -275,8 +276,12 @@ def cmd_price(args: argparse.Namespace) -> None:
     df = pd.read_excel(source, header=None)
 
     # 确保目标列存在
-    while df.shape[1] <= price_idx:
-        df[df.shape[1]] = np.nan
+    if df.shape[1] <= price_idx:
+        needed = price_idx + 1 - df.shape[1]
+        pad = pd.DataFrame(
+            np.nan, index=df.index, columns=range(df.shape[1], price_idx + 1)
+        )
+        df = pd.concat([df, pad], axis=1)
 
     # 2. 创建计算器
     calc = ProfitCalculator(station=station)
@@ -326,10 +331,10 @@ def cmd_price(args: argparse.Namespace) -> None:
         return
 
     # 3. 统计
-    prices = pd.Series(price_list)
     print(f"✅ 有效行数: {success}  ({skipped} 行跳过)")
-    print(f"💰 价格区间: EUR {prices.min():.2f} ~ {prices.max():.2f}")
-    print(f"📊 价格均值: EUR {prices.mean():.2f}  中位数: EUR {prices.median():.2f}")
+    print(f"💰 价格区间: EUR {min(price_list):.2f} ~ {max(price_list):.2f}")
+    print(f"📊 价格均值: EUR {statistics.mean(price_list):.2f}  "
+          f"中位数: EUR {statistics.median(price_list):.2f}")
 
     # 4. 用 openpyxl 回填到源文件（仅写入售价列，保留其它列不变）
     print(f"\n💾 回填到源文件: {source}")

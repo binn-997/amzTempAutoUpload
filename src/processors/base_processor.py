@@ -513,16 +513,13 @@ class BaseProcessor:
 
     # ==================== 入口 ====================
 
-    def run(self) -> None:
-        """执行完整处理流水线：读取 → 预处理 → 拆分写入。"""
-        print(f"🚀 开始执行 Amazon 模板处理程序 [{self.__class__.__name__}]")
-
+    def _load_and_preprocess(self) -> pd.DataFrame:
+        """读取源 Excel 文件并执行预处理（run / dry_run 共用）。"""
         if not self.source_file:
             raise ProcessingError("SOURCE_FILE 未设置")
         if not self.template_file:
             raise ProcessingError("TEMPLATE_FILE 未设置")
 
-        print(f"\n[1/3] 读取源数据: {self.source_file}")
         if not os.path.exists(self.source_file):
             raise ProcessingError(f"源文件不存在: {self.source_file}")
         if not os.path.exists(self.template_file):
@@ -537,8 +534,15 @@ class BaseProcessor:
                 f"读取源文件失败 [{self.source_file}]: {e}"
             ) from e
 
+        return self.preprocess_source_data(raw_df)
+
+    def run(self) -> None:
+        """执行完整处理流水线：读取 → 预处理 → 拆分写入。"""
+        print(f"🚀 开始执行 Amazon 模板处理程序 [{self.__class__.__name__}]")
+
+        print(f"\n[1/3] 读取源数据: {self.source_file}")
         print("\n[2/3] 预处理源数据...")
-        processed_df = self.preprocess_source_data(raw_df)
+        processed_df = self._load_and_preprocess()
 
         print("\n[3/3] 执行拆分写入...")
         self.save_split_workbooks(processed_df)
@@ -549,20 +553,7 @@ class BaseProcessor:
         """只做预处理，不写文件 — 用于验证配置。"""
         print(f"[DRY-RUN] 模式 [{self.__class__.__name__}]")
 
-        if not os.path.exists(self.source_file):
-            raise ProcessingError(f"源文件不存在: {self.source_file}")
-        if not os.path.exists(self.template_file):
-            raise ProcessingError(f"模板文件不存在: {self.template_file}")
-
-        try:
-            raw_df: pd.DataFrame = pd.read_excel(
-                self.source_file, sheet_name=0, header=None, dtype=str
-            )
-        except Exception as e:
-            raise IOFailure(
-                f"读取源文件失败 [{self.source_file}]: {e}"
-            ) from e
-        processed_df = self.preprocess_source_data(raw_df)
+        processed_df = self._load_and_preprocess()
 
         total_rows = len(processed_df)
         num_chunks = math.ceil(total_rows / self.chunk_size)

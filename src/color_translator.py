@@ -249,7 +249,7 @@ class ColorTranslator:
     @staticmethod
     def _detect_and_label_variants(
         groups: List[ColorGroup],
-    ) -> Dict[int, str]:
+    ) -> tuple[Dict[int, str], int]:
         """对颜色组进行变体检测，为重复签名添加 V1/V2 后缀。
 
         签名 = (颜色名, tuple(尺码列表))。
@@ -262,7 +262,7 @@ class ColorTranslator:
             groups: 已完成翻译的 ColorGroup 列表。
 
         Returns:
-            行索引 → 带变体后缀的颜色名 的映射。
+            (行索引 → 带变体后缀的颜色名 的映射, 被添加 V 后缀的行数)。
         """
         # 按签名分组
         signature_map: Dict[tuple, List[List[int]]] = defaultdict(list)
@@ -271,6 +271,7 @@ class ColorTranslator:
             signature_map[sig].append(g.row_indices)
 
         index_to_color: Dict[int, str] = {}
+        variant_labeled = 0
 
         for (color, _), index_lists in signature_map.items():
             n = len(index_lists)
@@ -280,10 +281,11 @@ class ColorTranslator:
             else:
                 for i, indices in enumerate(index_lists, 1):
                     label = f"{color}V{i}"
+                    variant_labeled += len(indices)
                     for idx in indices:
                         index_to_color[idx] = label
 
-        return index_to_color
+        return index_to_color, variant_labeled
 
     # ── 主处理方法 ──
 
@@ -353,22 +355,14 @@ class ColorTranslator:
 
             # 变体检测
             if enable_variant:
-                local_map = self._detect_and_label_variants(groups)
+                local_map, variant_count = self._detect_and_label_variants(groups)
+                total_variant_labeled += variant_count
                 for idx, color_val in local_map.items():
                     index_to_new_color[idx] = color_val
             else:
                 for g in groups:
                     for idx in g.row_indices:
                         index_to_new_color[idx] = g.color
-
-        # 修正变体标注计数
-        if enable_variant:
-            # 重新统计：数一下有多少行被加了 V 后缀
-            for idx, color_val in index_to_new_color.items():
-                # 检查是否含有 V+数字 后缀
-                if re.search(r"V\d+$", color_val):
-                    # 确认不是原始就有的（对比翻译后的基础颜色）
-                    total_variant_labeled += 1
 
         # 2. 处理 parent_sku 为 NaN 的行（每行自成一块，不做变体检测）
         nan_mask = parent_col.isna()
@@ -399,6 +393,8 @@ class ColorTranslator:
 
 # ==================== 便捷函数 ====================
 
+_DEFAULT_TRANSLATOR: Optional[ColorTranslator] = None
+
 
 def quick_translate(
     df: pd.DataFrame,
@@ -415,7 +411,10 @@ def quick_translate(
     Returns:
         颜色列已翻译的新 DataFrame。
     """
-    ct = ColorTranslator()
+    global _DEFAULT_TRANSLATOR
+    if _DEFAULT_TRANSLATOR is None:
+        _DEFAULT_TRANSLATOR = ColorTranslator()
+    ct = _DEFAULT_TRANSLATOR
     result_df = df.copy()
     for idx in range(len(result_df)):
         val = result_df.iloc[idx, color_col]
@@ -484,10 +483,11 @@ if __name__ == "__main__":
         ColorGroup(color="Schwarz", sizes=["L", "M", "S"], row_indices=[4, 5, 6]),
         ColorGroup(color="Rot", sizes=["XL"], row_indices=[7]),
     ]
-    label_map = ct._detect_and_label_variants(variant_groups)
+    label_map, variant_count = ct._detect_and_label_variants(variant_groups)
     assert label_map[1] == "SchwarzV1"
     assert label_map[4] == "SchwarzV2"
     assert label_map[7] == "Rot"  # 唯一签名，不加后缀
+    assert variant_count == 6  # SchwarzV1(3行) + SchwarzV2(3行)
     print("  Schwarz 重复 → V1/V2, Rot 唯一 → 不变 [PASS]")
 
     # ── 测试 process() 完整流程 ──

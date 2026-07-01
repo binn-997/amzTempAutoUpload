@@ -27,7 +27,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence
 
 import pandas as pd
 
@@ -508,6 +508,23 @@ class ProfitCalculator:
 
     # ── 核心计算 ──
 
+    def _resolve_shipping_cost(
+        self,
+        weight_g: Optional[float],
+        shipping_method: str,
+        shipping_cost_rmb: float,
+    ) -> float:
+        """根据重量查运费表，未提供重量时返回显式传入的运费成本。
+
+        将 weight_g → shipping_cost_rmb 的查表逻辑集中在此处，
+        calculate() 和 breakeven_price() 共用，避免重复和分支差异。
+        """
+        if weight_g is not None:
+            if self._shipping_table is None:
+                raise ValueError("未设置运费查找表，无法根据重量查运费")
+            return self._shipping_table.lookup(weight_g, method=shipping_method)
+        return shipping_cost_rmb
+
     def calculate(
         self,
         item_price: float,
@@ -540,12 +557,9 @@ class ProfitCalculator:
             raise ValueError(f"exchange_rate 必须 > 0，当前值: {exchange_rate}")
 
         # ── 如果给定了重量，从查表获取运费 ──
-        if weight_g is not None:
-            if self._shipping_table is None:
-                raise ValueError("未设置运费查找表，无法根据重量查运费")
-            shipping_cost_rmb = self._shipping_table.lookup(
-                weight_g, method=shipping_method
-            )
+        shipping_cost_rmb = self._resolve_shipping_cost(
+            weight_g, shipping_method, shipping_cost_rmb
+        )
 
         # ── 总售价 ──
         total_foreign = item_price + shipping_price
@@ -748,8 +762,8 @@ class ProfitCalculator:
             最低售价（外币，不含运费）。
         """
         if weight_g is not None and self._shipping_table is not None:
-            shipping_cost_rmb = self._shipping_table.lookup(
-                weight_g, method=shipping_method
+            shipping_cost_rmb = self._resolve_shipping_cost(
+                weight_g, shipping_method, shipping_cost_rmb
             )
 
         # 需要知道扣点率，但扣点率又取决于售价——这里用迭代法
@@ -807,7 +821,46 @@ class ProfitCalculator:
 
 # ==================== 便捷函数 ====================
 
+_DEFAULT_RATES: Dict[Station, float] = {
+    Station.DE: 7.8,
+    Station.US: 7.0,
+}
 
+
+def quick_profit(
+    station: Station,
+    item_price: float,
+    sku_cost_rmb: float,
+    weight_g: float,
+    shipping_price: float = 0.0,
+    exchange_rate: Optional[float] = None,
+) -> ProfitResult:
+    """快速利润计算（从重量自动查运费）。
+
+    Args:
+        station: 目标站点。
+        item_price: 商品售价（外币）。
+        sku_cost_rmb: SKU 成本（人民币）。
+        weight_g: 包裹重量（克）。
+        shipping_price: 向买家收取的运费（外币）。
+        exchange_rate: 汇率（默认：DE=7.8, US=7.0）。
+
+    Returns:
+        ProfitResult。
+    """
+    if exchange_rate is None:
+        exchange_rate = _DEFAULT_RATES.get(station, 7.8)
+    calc = ProfitCalculator(station)
+    return calc.calculate_from_weight(
+        item_price=item_price,
+        weight_g=weight_g,
+        shipping_price=shipping_price,
+        exchange_rate=exchange_rate,
+        sku_cost_rmb=sku_cost_rmb,
+    )
+
+
+# 保留旧函数名（向后兼容别名）
 def quick_de(
     item_price: float,
     sku_cost_rmb: float,
@@ -815,25 +868,10 @@ def quick_de(
     shipping_price: float = 0.0,
     exchange_rate: float = 7.8,
 ) -> ProfitResult:
-    """德国站 FBM 快速计算（从重量自动查运费）。
-
-    Args:
-        item_price: 商品售价（欧元）。
-        sku_cost_rmb: SKU 成本（人民币）。
-        weight_g: 包裹重量（克）。
-        shipping_price: 向买家收取的运费（欧元）。
-        exchange_rate: 汇率。
-
-    Returns:
-        ProfitResult。
-    """
-    calc = ProfitCalculator(Station.DE)
-    return calc.calculate_from_weight(
-        item_price=item_price,
-        weight_g=weight_g,
-        shipping_price=shipping_price,
-        exchange_rate=exchange_rate,
-        sku_cost_rmb=sku_cost_rmb,
+    """德国站 FBM 快速计算（向后兼容，推荐使用 quick_profit）。"""
+    return quick_profit(
+        Station.DE, item_price, sku_cost_rmb, weight_g,
+        shipping_price=shipping_price, exchange_rate=exchange_rate,
     )
 
 
@@ -844,14 +882,10 @@ def quick_us(
     shipping_price: float = 0.0,
     exchange_rate: float = 7.0,
 ) -> ProfitResult:
-    """美国站快速计算。"""
-    calc = ProfitCalculator(Station.US)
-    return calc.calculate_from_weight(
-        item_price=item_price,
-        weight_g=weight_g,
-        shipping_price=shipping_price,
-        exchange_rate=exchange_rate,
-        sku_cost_rmb=sku_cost_rmb,
+    """美国站快速计算（向后兼容，推荐使用 quick_profit）。"""
+    return quick_profit(
+        Station.US, item_price, sku_cost_rmb, weight_g,
+        shipping_price=shipping_price, exchange_rate=exchange_rate,
     )
 
 
