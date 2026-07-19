@@ -13,7 +13,7 @@
 
 ## 安装
 
-需要 Python 3.11–3.13。
+需要 Python 3.11–3.14。
 
 ```bash
 git clone https://github.com/binn-997/amzTempAutoUpload.git

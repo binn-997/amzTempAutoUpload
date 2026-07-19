@@ -6,3 +6,4 @@
 - 移除 `src.main`、旧的品牌脚本和重复颜色/拆分入口。
 - 增加配置基础校验、本地 Ruff/mypy/pytest 配置和 MIT 许可证。
 - 重建中文 README 与架构说明。
+- 支持 Python 3.11–3.14。
