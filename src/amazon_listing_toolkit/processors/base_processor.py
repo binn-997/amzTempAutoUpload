@@ -5,8 +5,8 @@
 执行完整的数据处理流水线：读取 → 预处理 → 填充 → 清除 → 保存。
 
 用法:
-    from src.config_loader import load_config, resolve_category_config
-    from src.processors.base_processor import BaseProcessor
+    from amazon_listing_toolkit.config_loader import load_config, resolve_category_config
+    from amazon_listing_toolkit.processors.base_processor import BaseProcessor
 
     config = load_config("config/categories.yaml")
     cat_config = resolve_category_config(config, "azd")
@@ -22,7 +22,7 @@ import logging
 import math
 import os
 import re
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional
 
 import pandas as pd
 from openpyxl import Workbook, load_workbook
@@ -50,7 +50,7 @@ def sanitize_cell_value(value: Any) -> Any:
     """检测并转义潜在的 CSV/Excel 公式注入字符。
 
     若字符串以 = + - @ 开头，前缀单引号中和公式执行。
-    模块级函数，可供 process.py / split_excel.py 等外部工具复用。
+    模块级函数，可供其他领域服务复用。
     """
     if isinstance(value, str):
         stripped = value.lstrip()
@@ -560,7 +560,7 @@ class BaseProcessor:
         parent_count = processed_df["is_parent"].sum()
         child_count = total_rows - parent_count
 
-        print(f"\n[SUMMARY] 预处理结果:")
+        print("\n[SUMMARY] 预处理结果:")
         print(f"   总行数:     {total_rows}")
         print(f"   父体:       {parent_count}")
         print(f"   子体:       {child_count}")
@@ -568,4 +568,4 @@ class BaseProcessor:
         print(f"   列数:       {len(processed_df.columns)}")
         print(f"   输出目录:   {self.output_dir}")
         print(f"   模板文件:   {self.template_file}")
-        print(f"\n[DONE] Dry-run 完成（未写入任何文件）。")
+        print("\n[DONE] Dry-run 完成（未写入任何文件）。")

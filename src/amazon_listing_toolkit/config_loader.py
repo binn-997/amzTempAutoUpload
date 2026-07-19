@@ -10,19 +10,65 @@ from __future__ import annotations
 import json
 import os
 import sys
+from dataclasses import dataclass
 from copy import deepcopy
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 # 修复 Windows 终端 GBK 编码问题
 if sys.stdout.encoding != "utf-8":
     try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        reconfigure = getattr(sys.stdout, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
 
 
 class ConfigError(Exception):
     """配置文件加载或解析错误。"""
+
+
+@dataclass(frozen=True)
+class ConfigDocument:
+    """经过基础结构校验的配置文档。"""
+
+    defaults: dict[str, Any]
+    source_columns: dict[str, Any]
+    template_columns: dict[str, Any]
+    categories: dict[str, dict[str, Any]]
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "defaults": self.defaults,
+            "source_columns": self.source_columns,
+            "template_columns": self.template_columns,
+            "categories": self.categories,
+        }
+
+
+def validate_config(config: Any) -> ConfigDocument:
+    """校验配置的公共结构，尽早报告可操作的错误。"""
+    if not isinstance(config, dict):
+        raise ConfigError("配置根节点必须是对象")
+    required = ("defaults", "source_columns", "template_columns", "categories")
+    missing = [key for key in required if key not in config]
+    if missing:
+        raise ConfigError(f"配置缺少必填项: {', '.join(missing)}")
+    categories = config["categories"]
+    if not isinstance(categories, dict) or not categories:
+        raise ConfigError("categories 必须是非空对象")
+    for key, value in categories.items():
+        if not isinstance(key, str) or not key.strip() or not isinstance(value, dict):
+            raise ConfigError("每个产品类型必须是非空字符串键及对象值")
+    for column in config["template_columns"].get("simple", {}).values():
+        if not isinstance(column, str) or not column.isalpha():
+            raise ConfigError(f"无效模板列字母: {column!r}")
+    return ConfigDocument(
+        defaults=dict(config["defaults"]),
+        source_columns=dict(config["source_columns"]),
+        template_columns=dict(config["template_columns"]),
+        categories={key: dict(value) for key, value in categories.items()},
+    )
 
 
 def _deep_merge(base: dict, override: dict) -> dict:
@@ -75,14 +121,14 @@ def load_config(config_path: str) -> dict:
             )
         try:
             with open(config_path, "r", encoding="utf-8") as f:
-                return yaml.safe_load(f)
+                return validate_config(yaml.safe_load(f)).as_dict()
         except yaml.YAMLError as e:
             raise ConfigError(f"YAML 解析失败 [{config_path}]: {e}") from e
 
     elif ext == ".json":
         try:
             with open(config_path, "r", encoding="utf-8") as f:
-                return json.load(f)
+                return validate_config(json.load(f)).as_dict()
         except json.JSONDecodeError as e:
             raise ConfigError(f"JSON 解析失败 [{config_path}]: {e}") from e
 
@@ -192,6 +238,5 @@ def find_project_root(start_path: str | None = None) -> str:
 
 
 def get_default_config_path() -> str:
-    """获取默认配置文件路径（项目根目录/config/categories.yaml）。"""
-    root = find_project_root()
-    return os.path.join(root, "config", "categories.yaml")
+    """获取随安装包分发的默认 YAML 配置路径。"""
+    return os.path.join(os.path.dirname(__file__), "config", "categories.yaml")

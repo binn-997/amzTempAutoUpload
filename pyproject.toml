@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "amazon-listing-toolkit"
+version = "3.0.0"
+description = "配置驱动的 Amazon Listing Excel 处理工具"
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+license = {file = "LICENSE"}
+authors = [{name = "cpt"}]
+dependencies = ["pandas>=2.0,<4", "openpyxl>=3.1,<4", "PyYAML>=6,<7"]
+
+[project.optional-dependencies]
+dev = ["mypy>=1.10", "pytest>=8", "ruff>=0.5"]
+
+[project.scripts]
+alt = "amazon_listing_toolkit.cli:main"
+
+[tool.setuptools.package-data]
+amazon_listing_toolkit = ["config/*.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src/amazon_listing_toolkit"]
+ignore_missing_imports = true
+no_site_packages = true
+warn_unused_ignores = true

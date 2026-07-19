@@ -34,6 +34,8 @@ env/
 ~$*.xlsx
 ~$*.xlsm
 *.log
+output.txt
+md
 
 # === 类型检查缓存 ===
 .mypy_cache/

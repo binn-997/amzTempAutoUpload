@@ -8,7 +8,7 @@
 综合扣点率包含：VAT/税 + Amazon 佣金 + 广告成本 + 退货损耗。
 
 用法:
-    from src.profit_calculator import ProfitCalculator, Station
+    from amazon_listing_toolkit.profit_calculator import ProfitCalculator, Station
 
     calc = ProfitCalculator(station=Station.DE)
     result = calc.calculate(
@@ -25,7 +25,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional, Sequence
 

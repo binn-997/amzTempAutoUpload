@@ -3,7 +3,7 @@
 
 用法:
     # 推荐：作为模块运行
-    python -m src.main process --type azd
+    alt process --type azd
 
     # 也可直接运行脚本
     python src/main.py process --type azd
@@ -22,14 +22,14 @@
     python src/main.py list-types --config my_config.yaml
 
     # ★ 利润定价：根据成本+重量反算销售价并回填到源文件 AM 列
-    python -m src.main price --source data/630td.xlsx
-    python -m src.main price --source data/630td.xlsx --target 0.25 --rate 7.8
-    python -m src.main price --source data/630td.xlsx --cost-col I --weight-col J
+    alt price --source data/630td.xlsx
+    alt price --source data/630td.xlsx --target 0.25 --rate 7.8
+    alt price --source data/630td.xlsx --cost-col I --weight-col J
 
     # ★ 颜色翻译：英→德翻译 + 变体 V1/V2 标注，原地修改源文件 G/H 列
-    python -m src.main translate --source data/701th.xlsx
-    python -m src.main translate --source data/xxx.xlsx --no-translate
-    python -m src.main translate --source data/xxx.xlsx --color-col E --size-col F
+    alt translate --source data/701th.xlsx
+    alt translate --source data/xxx.xlsx --no-translate
+    alt translate --source data/xxx.xlsx --color-col E --size-col F
 """
 
 from __future__ import annotations
@@ -49,23 +49,20 @@ from openpyxl.utils import column_index_from_string
 # 修复 Windows 终端 GBK 编码问题（支持 emoji 和中文输出）
 if sys.stdout.encoding != "utf-8":
     try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        reconfigure = getattr(sys.stdout, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
 
-# 确保项目根目录在 sys.path 中（支持直接 python src/main.py 执行）
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
-
-from src.config_loader import (
+from .config_loader import (
     ConfigError,
     get_default_config_path,
     list_categories,
     load_config,
     resolve_category_config,
 )
-from src.processors.base_processor import (
+from .processors.base_processor import (
     BaseProcessor,
     IOFailure,
     ProcessingError,
@@ -217,6 +214,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="跳过变体检测，仅执行颜色翻译。",
     )
 
+    split = sub.add_parser("split", help="按行数拆分 Excel 工作簿")
+    split.add_argument("--source", required=True, help="源 Excel 文件路径")
+    split.add_argument("--chunk", type=int, default=500, help="每个文件的数据行数")
+    split.add_argument("--header-rows", type=int, default=3, help="保留的表头行数")
+    split.add_argument("--sheet", default="Vorlage", help="工作表名称")
+    split.add_argument("--output-dir", default="./split_output", help="输出目录")
+    split.add_argument("--suffix", default="_part", help="输出文件名后缀")
+
     return parser
 
 
@@ -253,7 +258,7 @@ def cmd_process(args: argparse.Namespace) -> None:
 
 def cmd_price(args: argparse.Namespace) -> None:
     """执行 price 子命令：根据成本+重量反算销售价并回填到源文件。"""
-    from src.profit_calculator import ProfitCalculator, Station
+    from .profit_calculator import ProfitCalculator, Station
 
     source = args.source
     if not os.path.exists(source):
@@ -277,7 +282,6 @@ def cmd_price(args: argparse.Namespace) -> None:
 
     # 确保目标列存在
     if df.shape[1] <= price_idx:
-        needed = price_idx + 1 - df.shape[1]
         pad = pd.DataFrame(
             np.nan, index=df.index, columns=range(df.shape[1], price_idx + 1)
         )
@@ -358,7 +362,7 @@ def cmd_price(args: argparse.Namespace) -> None:
 
 def cmd_translate(args: argparse.Namespace) -> None:
     """执行 translate 子命令：颜色翻译 + 变体检测，原地修改源文件。"""
-    from src.color_translator import ColorTranslator
+    from .color_translator import ColorTranslator
 
     source = args.source
     if not os.path.exists(source):
@@ -442,6 +446,20 @@ def cmd_list_types(args: argparse.Namespace) -> None:
         print(f"{cat['key']:<8} {cat['description']}")
 
 
+def cmd_split(args: argparse.Namespace) -> None:
+    """执行 split 子命令。"""
+    from .excel_splitter import split_workbook
+
+    split_workbook(
+        source_path=args.source,
+        chunk_size=args.chunk,
+        header_rows=args.header_rows,
+        sheet_name=args.sheet,
+        output_dir=args.output_dir,
+        output_suffix=args.suffix,
+    )
+
+
 def main(argv: Optional[list[str]] = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -455,6 +473,8 @@ def main(argv: Optional[list[str]] = None) -> None:
             cmd_process(args)
         elif args.command == "list-types":
             cmd_list_types(args)
+        elif args.command == "split":
+            cmd_split(args)
         elif args.command == "price":
             cmd_price(args)
         elif args.command == "translate":

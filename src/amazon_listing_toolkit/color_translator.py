@@ -5,7 +5,7 @@
 模块不触碰文件系统，Excel I/O 由 CLI 层负责。
 
 用法:
-    from src.color_translator import ColorTranslator, quick_translate
+    from amazon_listing_toolkit.color_translator import ColorTranslator, quick_translate
 
     ct = ColorTranslator()
     result = ct.process(df, color_col=6, size_col=7, parent_sku_col=2)
@@ -448,10 +448,10 @@ if __name__ == "__main__":
         ("Watermelon Red", "Wassermelonenrot"),
     ]
     for input_val, expected in tests:
-        result = ct.translate(input_val)
-        status = "PASS" if result == expected else f"FAIL (got {result})"
-        print(f"  translate({input_val!r:25s}) = {result!r:25s}  [{status}]")
-        assert result == expected, f"translate({input_val!r}) failed: {result} != {expected}"
+        translated = ct.translate(input_val)
+        status = "PASS" if translated == expected else f"FAIL (got {translated})"
+        print(f"  translate({input_val!r:25s}) = {translated!r:25s}  [{status}]")
+        assert translated == expected, f"translate({input_val!r}) failed: {translated} != {expected}"
 
     # ── 测试非字符串处理 ──
     print("\n--- translate() 非字符串测试 ---")
@@ -474,7 +474,7 @@ if __name__ == "__main__":
     assert groups[1].color == "Black" and groups[1].sizes == ["XL", "XXL"]
     # 第 6 行颜色为 None，应被跳过
     assert groups[2].color == "Blue" and groups[2].sizes == ["M"]
-    print(f"  3 组提取正确: Pink(S/M/L), Black(XL/XXL), Blue(M) [PASS]")
+    print("  3 组提取正确: Pink(S/M/L), Black(XL/XXL), Blue(M) [PASS]")
 
     # ── 测试变体检测 ──
     print("\n--- _detect_and_label_variants() 测试 ---")

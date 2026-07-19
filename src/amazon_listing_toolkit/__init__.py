@@ -1,7 +1,7 @@
-"""src 包初始化。"""
+"""Amazon Listing Toolkit 的公开 Python API。"""
 
-from src.processors.base_processor import BaseProcessor, ProcessingError, IOFailure
-from src.profit_calculator import (
+from .processors.base_processor import BaseProcessor, ProcessingError, IOFailure
+from .profit_calculator import (
     ProfitCalculator,
     ProfitResult,
     DeductionTier,
@@ -12,7 +12,7 @@ from src.profit_calculator import (
     quick_de,
     quick_us,
 )
-from src.color_translator import (
+from .color_translator import (
     ColorTranslator,
     ColorGroup,
     TranslateResult,

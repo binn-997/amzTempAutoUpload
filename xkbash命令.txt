@@ -1,5 +1,0 @@
-python -m src.main process --type kle --source data/701kle.xlsx --chunk 2000
-
-python -m src.main price --source data/701kle.xlsx
-
-python -m src.main translate --source data/701kle.xlsx
